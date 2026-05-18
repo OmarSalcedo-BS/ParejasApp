@@ -1,22 +1,78 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { env } from './config/env';
 import healthRoutes from './routes/healthRoutes';
 import docsRoutes from './routes/docsRoutes';
-import { errorResponse } from './utils/responseUtils';
-import supabaseTestRoutes from './routes/supabaseTestRoutes';
 import authRoutes from './routes/authRoutes';
 import coupleRoutes from './routes/coupleRoutes';
+import { errorResponse } from './utils/responseUtils';
 
 const app = express();
 
-// ================= MIDDLEWARES GLOBALES =================
-app.use(cors());
-app.use(express.json({ limit: '10mb' })); // Limitamos tamaño por seguridad
+// ================= CONFIGURACIÓN DE SEGURIDAD =================
+
+// 1. Helmet - Headers de seguridad (protege contra vulnerabilidades comunes)
+app.use(helmet());
+
+// 2. Rate Limiting - Previene ataques de fuerza bruta
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 100, // Máximo 100 peticiones por IP
+  message: 'Demasiadas peticiones desde esta IP, intenta más tarde',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Límite más estricto para endpoints de autenticación
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // Solo 10 intentos por 15 minutos
+  skipSuccessfulRequests: true,
+  message: 'Demasiados intentos de inicio de sesión',
+});
+
+app.use('/api/', generalLimiter);
+app.use('/auth/login', authLimiter);
+app.use('/auth/register', authLimiter);
+
+// 3. CORS - Configurado para app móvil + desarrollo local
+// Las apps móviles NO envían origin, por eso permitimos !origin
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:8080',
+  'http://localhost:5000',
+  'capacitor://localhost',  // Para apps con Capacitor
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Permitir requests sin origin (apps móviles, Postman, curl)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    // Permitir orígenes de desarrollo
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Bloquear cualquier otro origen
+    console.log(`🔒 CORS bloqueó: ${origin}`);
+    callback(new Error('No permitido por CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+}));
+
+// ================= MIDDLEWARES =================
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // ================= RUTAS =================
-// Ruta principal (redirige a docs)
 app.get('/', (req, res) => {
   res.json({
     message: 'Bienvenido a la API de App Parejas',
@@ -25,20 +81,21 @@ app.get('/', (req, res) => {
   });
 });
 
-// Endpoints de la API
-app.use('/', healthRoutes);    
-app.use('/', docsRoutes); 
-app.use('/', supabaseTestRoutes);     
-app.use('/', authRoutes);
-app.use('/', coupleRoutes);
+// Endpoints públicos
+app.use('/', healthRoutes);     // GET /health
+app.use('/', docsRoutes);       // GET /docs y /docs.json
+
+// Endpoints de autenticación (con rate limiting especial)
+app.use('/', authRoutes);       // POST /auth/register, POST /auth/login, GET /auth/profile
+
+// Endpoints de parejas (requieren autenticación)
+app.use('/', coupleRoutes);     // POST /couple/create, POST /couple/join, GET /couple/info
 
 // ================= MANEJO DE ERRORES =================
-// Ruta no encontrada (404)
 app.use((req, res) => {
   res.status(404).json(errorResponse(`Ruta ${req.method} ${req.url} no encontrada`, 404));
 });
 
-// Manejador de errores global (500)
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error no manejado:', err.stack);
   res.status(500).json(errorResponse('Error interno del servidor', 500));
