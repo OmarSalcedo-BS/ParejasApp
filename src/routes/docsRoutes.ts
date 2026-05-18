@@ -8,6 +8,7 @@ const router = Router();
 router.use('/docs', swaggerUi.serve);
 router.get('/docs', swaggerUi.setup(swaggerSpec));
 
+
 // Ruta para obtener el JSON de OpenAPI
 router.get('/docs.json', (req, res) => {
   res.setHeader('Content-Type', 'application/json');

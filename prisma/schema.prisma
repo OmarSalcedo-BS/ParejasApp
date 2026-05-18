@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Tabla de parejas
+model Couple {
+  id          String    @id @default(cuid())
+  code        String    @unique  // Código de invitación (ej: ABC123)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  // Relaciones (bidireccionales)
+  users       User[]          @relation("UserCouple")
+  invitations CoupleInvitation[] @relation("CoupleInvitations")
+  
+  @@map("couples")
+}
+
+// Usuarios
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  displayName   String?   @map("display_name")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  
+  // Relación con pareja (bidireccional)
+  coupleId      String?   @map("couple_id")
+  couple        Couple?   @relation("UserCouple", fields: [coupleId], references: [id])
+  
+  // Relación con invitaciones enviadas (bidireccional)
+  sentInvitations CoupleInvitation[] @relation("InviterUser")
+  
+  @@map("users")
+}
+
+// Invitaciones de pareja
+model CoupleInvitation {
+  id          String    @id @default(cuid())
+  code        String
+  inviterId   String    @map("inviter_id")
+  used        Boolean   @default(false)
+  usedBy      String?   @map("used_by")
+  expiresAt   DateTime  @map("expires_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  
+  // Relaciones (bidireccionales)
+  inviter     User      @relation("InviterUser", fields: [inviterId], references: [id])
+  couple      Couple    @relation("CoupleInvitations", fields: [code], references: [code])
+  
+  @@unique([code, inviterId])
+  @@map("couple_invitations")
+}

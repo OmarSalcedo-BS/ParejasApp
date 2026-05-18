@@ -4,6 +4,9 @@ import { env } from './config/env';
 import healthRoutes from './routes/healthRoutes';
 import docsRoutes from './routes/docsRoutes';
 import { errorResponse } from './utils/responseUtils';
+import supabaseTestRoutes from './routes/supabaseTestRoutes';
+import authRoutes from './routes/authRoutes';
+import coupleRoutes from './routes/coupleRoutes';
 
 const app = express();
 
@@ -23,8 +26,11 @@ app.get('/', (req, res) => {
 });
 
 // Endpoints de la API
-app.use('/', healthRoutes);     // GET /health
-app.use('/', docsRoutes);       // GET /docs y /docs.json
+app.use('/', healthRoutes);    
+app.use('/', docsRoutes); 
+app.use('/', supabaseTestRoutes);     
+app.use('/', authRoutes);
+app.use('/', coupleRoutes);
 
 // ================= MANEJO DE ERRORES =================
 // Ruta no encontrada (404)
