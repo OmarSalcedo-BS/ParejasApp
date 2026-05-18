@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { successResponse, errorResponse } from '../utils/responseUtils';
-import { prisma } from '../config/prisma'; 
 
 /**
  * @swagger
@@ -40,7 +39,7 @@ export const register = async (req: Request, res: Response) => {
       return res.status(400).json(errorResponse('Email y contraseña son requeridos', 400));
     }
 
-    // 1. Registrar usuario en Supabase Auth
+    // Registrar en Supabase Auth (esto crea automáticamente el usuario)
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
@@ -55,47 +54,21 @@ export const register = async (req: Request, res: Response) => {
       throw new Error('No se pudo crear el usuario');
     }
 
-    // 2. Crear el usuario en nuestra tabla de Prisma
-    await prisma.user.create({
-      data: {
-        id: authData.user.id,  // Mismo ID que en Supabase
-        email: authData.user.email!,
-        displayName: displayName || email.split('@')[0],
-      }
-    });
+    // La tabla 'users' se maneja con triggers o manualmente
+    // Por ahora, confiamos en que el trigger de Supabase la actualiza
 
     res.status(201).json(successResponse({
       user: {
         id: authData.user.id,
         email: authData.user.email,
         displayName: displayName || email.split('@')[0],
-      },
-      message: 'Usuario registrado exitosamente'
+      }
     }, 'Registro exitoso'));
 
   } catch (error: any) {
     console.error('Error en registro:', error);
     res.status(500).json(errorResponse(error.message, 500));
   }
-};
-
-const syncUserToPrisma = async (userId: string, email: string, displayName?: string) => {
-  const existingUser = await prisma.user.findUnique({
-    where: { id: userId }
-  });
-  
-  if (!existingUser) {
-    await prisma.user.create({
-      data: {
-        id: userId,
-        email: email,
-        displayName: displayName || email.split('@')[0],
-      }
-    });
-    console.log(`✅ Usuario ${email} sincronizado con Prisma`);
-  }
-  
-  return true;
 };
 
 
@@ -141,7 +114,11 @@ export const login = async (req: Request, res: Response) => {
 
     res.status(200).json(successResponse({
       session: data.session,
-      user: data.user
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+        displayName: data.user.user_metadata?.display_name,
+      }
     }, 'Login exitoso'));
 
   } catch (error: any) {
@@ -192,7 +169,7 @@ export const getProfile = async (req: Request, res: Response) => {
     const { data: { user }, error } = await supabase.auth.getUser(token);
 
     if (error || !user) {
-      return res.status(401).json(errorResponse('Token inválido', 401));
+      return res.status(401).json(errorResponse('Token inválido o expirado', 401));
     }
 
     res.status(200).json(successResponse({
@@ -202,7 +179,7 @@ export const getProfile = async (req: Request, res: Response) => {
     }, 'Perfil obtenido'));
 
   } catch (error: any) {
+    console.error('Error en getProfile:', error);
     res.status(500).json(errorResponse(error.message, 500));
   }
 };
-

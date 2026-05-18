@@ -1,5 +1,3 @@
-// Esto DEBE ir ANTES de importar cualquier cosa que use process.env
-import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.SUPABASE_URL || '';
@@ -13,14 +11,28 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export const checkSupabaseConnection = async () => {
-  try {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) throw error;
-    console.log('✅ Supabase conectado correctamente');
-    return true;
-  } catch (error) {
-    console.error('❌ Error conectando a Supabase:', error);
-    return false;
-  }
+// Tipos para nuestras tablas (documentación)
+export type User = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  couple_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Couple = {
+  id: string;
+  code: string;
+  created_at: string;
+};
+
+export type CoupleInvitation = {
+  id: string;
+  code: string;
+  inviter_id: string;
+  used: boolean;
+  used_by: string | null;
+  expires_at: string;
+  created_at: string;
 };

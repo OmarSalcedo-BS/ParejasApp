@@ -11,7 +11,7 @@ import coupleRoutes from './routes/coupleRoutes';
 import { errorResponse } from './utils/responseUtils';
 
 const app = express();
-
+app.set('trust proxy', 1);
 // ================= CONFIGURACIÓN DE SEGURIDAD =================
 
 // 1. Helmet - Headers de seguridad (protege contra vulnerabilidades comunes)

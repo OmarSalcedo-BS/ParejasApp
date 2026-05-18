@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/supabase';
-import { prisma } from '../config/prisma';
 import { generateCoupleCode, isValidCoupleCode } from '../utils/codeGenerator';
 import { successResponse, errorResponse } from '../utils/responseUtils';
 
@@ -10,6 +9,7 @@ const getAuthenticatedUser = async (token: string) => {
   if (error || !user) throw new Error('Usuario no autenticado');
   return user;
 };
+
 
 /**
  * @swagger
@@ -54,53 +54,70 @@ export const createCouple = async (req: Request, res: Response) => {
 
     const user = await getAuthenticatedUser(token);
     
-    // Verificar si el usuario ya tiene pareja
-    const existingUser = await prisma.user.findUnique({
-      where: { id: user.id },
-    });
+    // Verificar si ya tiene pareja (consultar tabla couples)
+    const { data: existingCouple } = await supabase
+      .from('users')
+      .select('couple_id')
+      .eq('id', user.id)
+      .single();
 
-    if (existingUser?.coupleId) {
+    if (existingCouple?.couple_id) {
       return res.status(400).json(errorResponse('Ya tienes una pareja asignada', 400));
     }
 
     // Generar código único
     let code = generateCoupleCode();
-    let existingCouple = await prisma.couple.findUnique({ where: { code } });
-    
-    // Asegurar que el código sea único
-    while (existingCouple) {
+    let { data: existing } = await supabase
+      .from('couples')
+      .select('id')
+      .eq('code', code)
+      .single();
+
+    while (existing) {
       code = generateCoupleCode();
-      existingCouple = await prisma.couple.findUnique({ where: { code } });
+      const { data: retry } = await supabase
+        .from('couples')
+        .select('id')
+        .eq('code', code)
+        .single();
+      existing = retry;
     }
 
     // Crear la pareja
-    const couple = await prisma.couple.create({
-      data: { code }
-    });
+    const { data: couple, error: coupleError } = await supabase
+      .from('couples')
+      .insert({ code })
+      .select()
+      .single();
 
-    // Asignar el usuario a la pareja
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { coupleId: couple.id }
-    });
+    if (coupleError) throw coupleError;
 
-    // Crear registro de invitación (válido por 7 días)
+    // Asignar usuario a la pareja
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ couple_id: couple.id })
+      .eq('id', user.id);
+
+    if (updateError) throw updateError;
+
+    // Crear invitación (válida 7 días)
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    await prisma.coupleInvitation.create({
-      data: {
+    const { error: invitationError } = await supabase
+      .from('couple_invitations')
+      .insert({
         code,
-        inviterId: user.id,
-        expiresAt,
-      }
-    });
+        inviter_id: user.id,
+        expires_at: expiresAt.toISOString(),
+      });
+
+    if (invitationError) throw invitationError;
 
     res.status(201).json(successResponse({
       coupleId: couple.id,
       code: couple.code,
       expiresAt,
-      message: 'Comparte este código de 6 letras con tu pareja'
     }, 'Pareja creada'));
 
   } catch (error: any) {
@@ -151,81 +168,91 @@ export const joinCouple = async (req: Request, res: Response) => {
     const { code } = req.body;
     
     if (!code) {
-      return res.status(400).json(errorResponse('Código de invitación requerido', 400));
+      return res.status(400).json(errorResponse('Código requerido', 400));
     }
 
     const normalizedCode = code.toUpperCase().trim();
     
     if (!isValidCoupleCode(normalizedCode)) {
-      return res.status(400).json(errorResponse('Código inválido. Debe tener 6 caracteres (letras y números)', 400));
+      return res.status(400).json(errorResponse('Código inválido (6 caracteres A-Z, 0-9)', 400));
     }
 
     const user = await getAuthenticatedUser(token);
 
-    // Verificar si el usuario ya tiene pareja
-    const existingUser = await prisma.user.findUnique({
-      where: { id: user.id }
-    });
+    // Verificar si ya tiene pareja
+    const { data: userData } = await supabase
+      .from('users')
+      .select('couple_id')
+      .eq('id', user.id)
+      .single();
 
-    if (existingUser?.coupleId) {
+    if (userData?.couple_id) {
       return res.status(400).json(errorResponse('Ya tienes una pareja asignada', 400));
     }
 
-    // Buscar la pareja por código
-    const couple = await prisma.couple.findUnique({
-      where: { code: normalizedCode },
-      include: { users: true }
-    });
+    // Buscar pareja por código
+    const { data: couple, error: coupleError } = await supabase
+      .from('couples')
+      .select('*')
+      .eq('code', normalizedCode)
+      .single();
 
-    if (!couple) {
+    if (coupleError || !couple) {
       return res.status(404).json(errorResponse('Código de invitación inválido', 404));
     }
 
-    // Verificar que la invitación esté vigente
-    const invitation = await prisma.coupleInvitation.findFirst({
-      where: {
-        code: normalizedCode,
-        used: false,
-        expiresAt: { gt: new Date() }
-      }
-    });
+    // Verificar invitación vigente
+    const { data: invitation, error: invError } = await supabase
+      .from('couple_invitations')
+      .select('*')
+      .eq('code', normalizedCode)
+      .eq('used', false)
+      .gt('expires_at', new Date().toISOString())
+      .single();
 
-    if (!invitation) {
+    if (invError || !invitation) {
       return res.status(400).json(errorResponse('El código ha expirado o ya fue usado', 400));
     }
 
-    // Verificar que no sea el mismo usuario que creó la invitación
-    if (invitation.inviterId === user.id) {
+    if (invitation.inviter_id === user.id) {
       return res.status(400).json(errorResponse('No puedes unirte a tu propia pareja', 400));
     }
 
-    // Unir al usuario a la pareja
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { coupleId: couple.id }
-    });
+    // Unir usuario a la pareja
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ couple_id: couple.id })
+      .eq('id', user.id);
 
-    // Marcar la invitación como usada
-    await prisma.coupleInvitation.update({
-      where: { id: invitation.id },
-      data: { used: true, usedBy: user.id }
-    });
+    if (updateError) throw updateError;
 
-    // Obtener el nombre del compañero
-    const partner = couple.users.find(u => u.id !== user.id);
-    const partnerName = partner?.displayName || partner?.email?.split('@')[0] || 'tu pareja';
+    // Marcar invitación como usada
+    await supabase
+      .from('couple_invitations')
+      .update({ used: true, used_by: user.id })
+      .eq('id', invitation.id);
+
+    // Obtener información del compañero
+    const { data: users } = await supabase
+      .from('users')
+      .select('display_name, email')
+      .eq('couple_id', couple.id)
+      .neq('id', user.id)
+      .single();
+
+    const partnerName = users?.display_name || users?.email?.split('@')[0] || 'tu pareja';
 
     res.status(200).json(successResponse({
       coupleId: couple.id,
       partner: partnerName,
-      message: `Te has unido con ${partnerName}`
-    }, 'Bienvenido a la pareja'));
+    }, 'Te has unido a la pareja'));
 
   } catch (error: any) {
     console.error('Error en joinCouple:', error);
     res.status(500).json(errorResponse(error.message, 500));
   }
 };
+
 
 /**
  * @swagger
@@ -273,37 +300,46 @@ export const getCoupleInfo = async (req: Request, res: Response) => {
 
     const user = await getAuthenticatedUser(token);
 
-    const userWithCouple = await prisma.user.findUnique({
-      where: { id: user.id },
-      include: {
-        couple: {
-          include: {
-            users: {
-              select: {
-                id: true,
-                email: true,
-                displayName: true,
-              }
-            }
-          }
-        }
-      }
-    });
+    // Obtener usuario con su pareja
+    const { data: userWithCouple, error: userError } = await supabase
+      .from('users')
+      .select(`
+        *,
+        couple:couples (
+          *,
+          users:users (
+            id,
+            email,
+            display_name
+          )
+        )
+      `)
+      .eq('id', user.id)
+      .single();
 
-    if (!userWithCouple?.couple) {
+    if (userError || !userWithCouple?.couple) {
       return res.status(404).json(errorResponse('No tienes una pareja asignada', 404));
     }
 
-    const partner = userWithCouple.couple.users.find(u => u.id !== user.id);
-    const currentUser = userWithCouple.couple.users.find(u => u.id === user.id);
+    const couple = userWithCouple.couple;
+    const partner = couple.users?.find((u: any) => u.id !== user.id);
+    const myInfo = couple.users?.find((u: any) => u.id === user.id);
 
     res.status(200).json(successResponse({
-      coupleId: userWithCouple.couple.id,
-      code: userWithCouple.couple.code,
-      myInfo: currentUser,
-      partner: partner || null,
-      memberCount: userWithCouple.couple.users.length,
-      since: userWithCouple.createdAt,
+      coupleId: couple.id,
+      code: couple.code,
+      myInfo: {
+        id: myInfo?.id,
+        email: myInfo?.email,
+        displayName: myInfo?.display_name,
+      },
+      partner: partner ? {
+        id: partner.id,
+        email: partner.email,
+        displayName: partner.display_name,
+      } : null,
+      memberCount: couple.users?.length || 0,
+      since: userWithCouple.created_at,
     }, 'Información de pareja'));
 
   } catch (error: any) {
