@@ -7,27 +7,28 @@ import { successResponse, errorResponse } from '../utils/responseUtils';
  * /auth/register:
  *   post:
  *     summary: Registrar un nuevo usuario
- *     description: Crea una cuenta nueva en la aplicación
  *     tags: [Autenticación]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/RegisterRequest'
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *               displayName:
+ *                 type: string
  *     responses:
  *       201:
  *         description: Usuario registrado exitosamente
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/AuthResponse'
  *       400:
- *         description: Faltan datos requeridos
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         description: Datos inválidos
  *       500:
  *         description: Error del servidor
  */
@@ -39,7 +40,7 @@ export const register = async (req: Request, res: Response) => {
       return res.status(400).json(errorResponse('Email y contraseña son requeridos', 400));
     }
 
-    // Registrar en Supabase Auth (esto crea automáticamente el usuario)
+    // 1. Registrar en Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
@@ -51,11 +52,22 @@ export const register = async (req: Request, res: Response) => {
     if (authError) throw authError;
 
     if (!authData.user) {
-      throw new Error('No se pudo crear el usuario');
+      throw new Error('No se pudo crear el usuario en Auth');
     }
 
-    // La tabla 'users' se maneja con triggers o manualmente
-    // Por ahora, confiamos en que el trigger de Supabase la actualiza
+    // 2. Crear el usuario en nuestra tabla public.users
+    const { error: insertError } = await supabase
+      .from('users')
+      .insert({
+        id: authData.user.id,  // Supabase usa UUID, pero lo guardamos como TEXT
+        email: authData.user.email,
+        display_name: displayName || email.split('@')[0],
+      });
+
+    if (insertError) {
+      console.error('Error insertando en users:', insertError);
+
+    }
 
     res.status(201).json(successResponse({
       user: {
@@ -77,23 +89,24 @@ export const register = async (req: Request, res: Response) => {
  * /auth/login:
  *   post:
  *     summary: Iniciar sesión
- *     description: Autentica un usuario y devuelve un token JWT
  *     tags: [Autenticación]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/LoginRequest'
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
  *     responses:
  *       200:
  *         description: Login exitoso
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/AuthResponse'
- *       400:
- *         description: Faltan datos requeridos
  *       401:
  *         description: Credenciales inválidas
  */
@@ -132,31 +145,14 @@ export const login = async (req: Request, res: Response) => {
  * /auth/profile:
  *   get:
  *     summary: Obtener perfil del usuario
- *     description: Retorna la información del usuario autenticado
  *     tags: [Autenticación]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Perfil obtenido exitosamente
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     id:
- *                       type: string
- *                     email:
- *                       type: string
- *                     displayName:
- *                       type: string
+ *         description: Perfil obtenido
  *       401:
- *         description: No autorizado - Token inválido o no proporcionado
+ *         description: No autorizado
  */
 export const getProfile = async (req: Request, res: Response) => {
   try {
