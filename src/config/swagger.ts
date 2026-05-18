@@ -1,6 +1,14 @@
 import swaggerJsdoc from 'swagger-jsdoc';
 import { env } from './env';
 
+// Detectar si estamos en producción
+const isProduction = process.env.NODE_ENV === 'production';
+
+// URL base según entorno
+const serverUrl = isProduction
+  ? 'https://app-parejas-backend.onrender.com' 
+  : `http://localhost:${env.port}`;
+
 const options = {
   definition: {
     openapi: '3.0.0',
@@ -9,17 +17,13 @@ const options = {
       version: env.apiVersion,
       description: 'API para aplicación de parejas con preguntas diarias, mascota virtual y más',
       contact: {
-        name: 'Omar Salcedo',
+        name: 'Tu Nombre',
       },
     },
     servers: [
       {
-        url: `http://localhost:${env.port}`,
-        description: 'Servidor local',
-      },
-      {
-        url: 'https://tu-app-parejas.onrender.com',
-        description: 'https://tu-app-parejas.onrender.com',
+        url: serverUrl,
+        description: isProduction ? 'Servidor de Producción' : 'Servidor Local',
       },
     ],
     components: {
@@ -47,40 +51,6 @@ const options = {
           properties: {
             email: { type: 'string', format: 'email', example: 'usuario@ejemplo.com' },
             password: { type: 'string', format: 'password', example: '12345678' },
-          },
-        },
-        AuthResponse: {
-          type: 'object',
-          properties: {
-            success: { type: 'boolean', example: true },
-            message: { type: 'string', example: 'Login exitoso' },
-            data: {
-              type: 'object',
-              properties: {
-                session: {
-                  type: 'object',
-                  properties: {
-                    access_token: { type: 'string' },
-                    refresh_token: { type: 'string' },
-                  },
-                },
-                user: {
-                  type: 'object',
-                  properties: {
-                    id: { type: 'string' },
-                    email: { type: 'string' },
-                  },
-                },
-              },
-            },
-          },
-        },
-        ErrorResponse: {
-          type: 'object',
-          properties: {
-            success: { type: 'boolean', example: false },
-            message: { type: 'string' },
-            code: { type: 'number' },
           },
         },
       },
