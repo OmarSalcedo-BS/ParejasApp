@@ -14,22 +14,21 @@ const app = express();
 
 // ================= CONFIGURACIÓN DE SEGURIDAD =================
 
-// 1. Helmet - Headers de seguridad (protege contra vulnerabilidades comunes)
+// 1. Helmet - Headers de seguridad
 app.use(helmet());
 
-// 2. Rate Limiting - Previene ataques de fuerza bruta
+// 2. Rate Limiting
 const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // Máximo 100 peticiones por IP
-  message: 'Demasiadas peticiones desde esta IP, intenta más tarde',
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: 'Demasiadas peticiones desde esta IP',
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Límite más estricto para endpoints de autenticación
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10, // Solo 10 intentos por 15 minutos
+  max: 10,
   skipSuccessfulRequests: true,
   message: 'Demasiados intentos de inicio de sesión',
 });
@@ -38,34 +37,41 @@ app.use('/api/', generalLimiter);
 app.use('/auth/login', authLimiter);
 app.use('/auth/register', authLimiter);
 
-// 3. CORS - Configurado para app móvil + desarrollo local
-// Las apps móviles NO envían origin, por eso permitimos !origin
+// 3. CORS - Configuración COMPLETA para desarrollo y producción
+// Lista de orígenes permitidos
 const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:8080',
-  'http://localhost:5000',
-  'capacitor://localhost',  // Para apps con Capacitor
+  'http://localhost:3000',      // Frontend local
+  'http://localhost:8080',      // Flutter web
+  'http://localhost:5000',      // Otro frontend
+  'http://localhost:10000',     // Swagger UI local
+  'https://app-parejas-backend.onrender.com', // Producción
+  'capacitor://localhost',      // App móvil
 ];
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Permitir requests sin origin (apps móviles, Postman, curl)
+    // Permitir requests sin origin (apps móviles, curl, Postman)
     if (!origin) {
       return callback(null, true);
     }
     
-    // Permitir orígenes de desarrollo
+    // Permitir orígenes en lista blanca
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
     
-    // Bloquear cualquier otro origen
+    // Para desarrollo: permitir cualquier localhost
+    if (origin && (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'))) {
+      return callback(null, true);
+    }
+    
     console.log(`🔒 CORS bloqueó: ${origin}`);
-    callback(new Error('No permitido por CORS'));
+    callback(new Error(`Origen ${origin} no permitido por CORS`));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Authorization'],
 }));
 
 // ================= MIDDLEWARES =================
@@ -76,20 +82,15 @@ app.use(express.urlencoded({ extended: true }));
 app.get('/', (req, res) => {
   res.json({
     message: 'Bienvenido a la API de App Parejas',
-    documentation: `http://localhost:${env.port}/docs`,
+    documentation: `${req.protocol}://${req.get('host')}/docs`,
     version: env.apiVersion,
   });
 });
 
-// Endpoints públicos
-app.use('/', healthRoutes);     // GET /health
-app.use('/', docsRoutes);       // GET /docs y /docs.json
-
-// Endpoints de autenticación (con rate limiting especial)
-app.use('/', authRoutes);       // POST /auth/register, POST /auth/login, GET /auth/profile
-
-// Endpoints de parejas (requieren autenticación)
-app.use('/', coupleRoutes);     // POST /couple/create, POST /couple/join, GET /couple/info
+app.use('/', healthRoutes);
+app.use('/', docsRoutes);
+app.use('/', authRoutes);
+app.use('/', coupleRoutes);
 
 // ================= MANEJO DE ERRORES =================
 app.use((req, res) => {
@@ -102,12 +103,13 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 });
 
 // ================= INICIAR SERVIDOR =================
-app.listen(env.port, () => {
+const PORT = env.port || 3000;
+app.listen(PORT, () => {
   console.log('\n=================================');
   console.log(`🚀 SERVIDOR CORRIENDO`);
-  console.log(`📍 Local: http://localhost:${env.port}`);
-  console.log(`📚 Documentación: http://localhost:${env.port}/docs`);
-  console.log(`💚 Health check: http://localhost:${env.port}/health`);
+  console.log(`📍 Local: http://localhost:${PORT}`);
+  console.log(`📚 Documentación: http://localhost:${PORT}/docs`);
+  console.log(`💚 Health check: http://localhost:${PORT}/health`);
   console.log(`🌍 Modo: ${env.nodeEnv}`);
   console.log('=================================\n');
 });
