@@ -54,14 +54,14 @@ export const createCouple = async (req: Request, res: Response) => {
 
     const user = await getAuthenticatedUser(token);
     
-    // Verificar si ya tiene pareja (consultar tabla couples)
-    const { data: existingCouple } = await supabase
+    // Verificar si ya tiene pareja
+    const { data: existingUser } = await supabase
       .from('users')
       .select('couple_id')
       .eq('id', user.id)
       .single();
 
-    if (existingCouple?.couple_id) {
+    if (existingUser?.couple_id) {
       return res.status(400).json(errorResponse('Ya tienes una pareja asignada', 400));
     }
 
@@ -83,14 +83,23 @@ export const createCouple = async (req: Request, res: Response) => {
       existing = retry;
     }
 
-    // Crear la pareja
+    // Generar ID manualmente usando timestamp + random
+    const coupleId = `cp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+    // Crear la pareja con ID manual
     const { data: couple, error: coupleError } = await supabase
       .from('couples')
-      .insert({ code })
+      .insert({ 
+        id: coupleId,
+        code 
+      })
       .select()
       .single();
 
-    if (coupleError) throw coupleError;
+    if (coupleError) {
+      console.error('Error creando pareja:', coupleError);
+      throw coupleError;
+    }
 
     // Asignar usuario a la pareja
     const { error: updateError } = await supabase
@@ -103,16 +112,22 @@ export const createCouple = async (req: Request, res: Response) => {
     // Crear invitación (válida 7 días)
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
+    
+    const invitationId = `inv_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
     const { error: invitationError } = await supabase
       .from('couple_invitations')
       .insert({
+        id: invitationId,
         code,
         inviter_id: user.id,
         expires_at: expiresAt.toISOString(),
       });
 
-    if (invitationError) throw invitationError;
+    if (invitationError) {
+      console.error('Error creando invitación:', invitationError);
+      // No fallamos la creación de la pareja, solo logueamos
+    }
 
     res.status(201).json(successResponse({
       coupleId: couple.id,
