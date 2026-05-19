@@ -6,7 +6,7 @@ const router = Router();
 router.post('/couple/create', createCouple);
 router.post('/couple/join', joinCouple);
 router.get('/couple/info', getCoupleInfo);
-router.get('/couple/anniversary', setAnniversary);
+router.post('/couple/anniversary', setAnniversary);   
 router.get('/couple/anniversary', getAnniversaryInfo);
 
 export default router;
