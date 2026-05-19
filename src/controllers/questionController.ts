@@ -132,7 +132,12 @@ export const getTodaysQuestion = async (req: Request, res: Response) => {
       const { data: questions, error: qError } = await supabase
         .from('daily_questions')
         .select('*')
-        .order('id');
+        .order('id', {ascending: true});
+
+        console.log('🔍 DEBUG - questions:', questions);
+        console.log('🔍 DEBUG - error:', qError);
+        console.log('🔍 DEBUG - count:', questions?.length);
+
 
       if (qError || !questions || questions.length === 0) {
         return res.status(500).json(errorResponse('No hay preguntas disponibles', 500));
