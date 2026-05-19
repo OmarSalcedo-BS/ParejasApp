@@ -140,7 +140,7 @@ export const answerQuestion = async (req: Request, res: Response) => {
       return res.status(400).json(errorResponse('questionId y answer son requeridos', 400));
     }
 
-    const user = await getAuthenticatedUser(user);
+    const user = await getAuthenticatedUser(token);
     const today = new Date().toISOString().split('T')[0];
 
     // Obtener usuario con su pareja
