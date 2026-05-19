@@ -380,3 +380,129 @@ export const getCoupleInfo = async (req: Request, res: Response) => {
     res.status(500).json(errorResponse(error.message, 500));
   }
 };
+
+
+/**
+ * Establecer o actualizar la fecha de aniversario
+ */
+export const setAnniversary = async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json(errorResponse('Token no proporcionado', 401));
+    }
+
+    const { anniversaryDate, celebrateMonths } = req.body;
+    
+    if (!anniversaryDate) {
+      return res.status(400).json(errorResponse('Fecha de aniversario requerida', 400));
+    }
+
+    const supabaseUser = await getAuthenticatedUser(token);
+
+    // Obtener el usuario y su couple_id
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('couple_id')
+      .eq('id', supabaseUser.id)
+      .single();
+
+    if (userError || !user?.couple_id) {
+      return res.status(404).json(errorResponse('No tienes una pareja asignada', 404));
+    }
+
+    // Actualizar la pareja con la fecha de aniversario
+    const { data: couple, error: coupleError } = await supabase
+      .from('couples')
+      .update({ 
+        anniversary_date: anniversaryDate,
+        celebrate_months: celebrateMonths ?? true
+      })
+      .eq('id', user.couple_id)
+      .select()
+      .single();
+
+    if (coupleError) {
+      console.error('Error actualizando aniversario:', coupleError);
+      throw coupleError;
+    }
+
+    res.status(200).json(successResponse({
+      coupleId: couple.id,
+      anniversaryDate: couple.anniversary_date,
+      celebrateMonths: couple.celebrate_months,
+    }, 'Aniversario actualizado'));
+
+  } catch (error: any) {
+    console.error('Error en setAnniversary:', error);
+    res.status(500).json(errorResponse(error.message, 500));
+  }
+};
+
+/**
+ * Obtener información del aniversario (días restantes, meses, etc.)
+ */
+export const getAnniversaryInfo = async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json(errorResponse('Token no proporcionado', 401));
+    }
+
+    const supabaseUser = await getAuthenticatedUser(token);
+
+    // Obtener el usuario y su pareja
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('couple_id')
+      .eq('id', supabaseUser.id)
+      .single();
+
+    if (userError || !user?.couple_id) {
+      return res.status(404).json(errorResponse('No tienes una pareja asignada', 404));
+    }
+
+    // Obtener la pareja con la fecha de aniversario
+    const { data: couple, error: coupleError } = await supabase
+      .from('couples')
+      .select('anniversary_date, celebrate_months, created_at')
+      .eq('id', user.couple_id)
+      .single();
+
+    if (coupleError || !couple?.anniversary_date) {
+      return res.status(200).json(successResponse(null, 'No hay fecha de aniversario configurada'));
+    }
+
+    // Calcular días y meses
+    const anniversaryDate = new Date(couple.anniversary_date);
+    const today = new Date();
+    
+    // Días desde el aniversario
+    const daysSince = Math.floor((today.getTime() - anniversaryDate.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Próximo aniversario
+    const nextAnniversary = new Date(today.getFullYear(), anniversaryDate.getMonth(), anniversaryDate.getDate());
+    if (nextAnniversary < today) {
+      nextAnniversary.setFullYear(today.getFullYear() + 1);
+    }
+    const daysUntil = Math.floor((nextAnniversary.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Meses juntos
+    let monthsTogether = (today.getFullYear() - anniversaryDate.getFullYear()) * 12;
+    monthsTogether += today.getMonth() - anniversaryDate.getMonth();
+    if (today.getDate() < anniversaryDate.getDate()) monthsTogether--;
+
+    res.status(200).json(successResponse({
+      anniversaryDate: couple.anniversary_date,
+      celebrateMonths: couple.celebrate_months,
+      daysSince: daysSince,
+      daysUntil: daysUntil,
+      monthsTogether: monthsTogether,
+      nextAnniversaryDate: nextAnniversary.toISOString().split('T')[0],
+    }, 'Información de aniversario'));
+
+  } catch (error: any) {
+    console.error('Error en getAnniversaryInfo:', error);
+    res.status(500).json(errorResponse(error.message, 500));
+  }
+};
