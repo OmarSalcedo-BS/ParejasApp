@@ -9,6 +9,7 @@ import docsRoutes from './routes/docsRoutes';
 import authRoutes from './routes/authRoutes';
 import coupleRoutes from './routes/coupleRoutes';
 import { errorResponse } from './utils/responseUtils';
+import questionRoutes from './routes/questionRoutes';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -68,14 +69,16 @@ app.get('/', (req, res) => {
 });
 
 // Endpoints públicos
-app.use('/', healthRoutes);     // GET /health
-app.use('/', docsRoutes);       // GET /docs y /docs.json
+app.use('/', healthRoutes);     
+app.use('/', docsRoutes);      
 
-// Endpoints de autenticación (con rate limiting especial)
-app.use('/', authRoutes);       // POST /auth/register, POST /auth/login, GET /auth/profile
 
-// Endpoints de parejas (requieren autenticación)
-app.use('/', coupleRoutes);     // POST /couple/create, POST /couple/join, GET /couple/info
+app.use('/', authRoutes);       
+
+
+app.use('/', coupleRoutes);     
+
+app.use('/', questionRoutes);
 
 // ================= MANEJO DE ERRORES =================
 app.use((req, res) => {
@@ -86,6 +89,8 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
   console.error('Error no manejado:', err.stack);
   res.status(500).json(errorResponse('Error interno del servidor', 500));
 });
+
+
 
 // ================= INICIAR SERVIDOR =================
 app.listen(env.port, () => {
