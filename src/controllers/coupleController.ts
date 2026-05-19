@@ -313,32 +313,50 @@ export const getCoupleInfo = async (req: Request, res: Response) => {
       return res.status(401).json(errorResponse('Token no proporcionado', 401));
     }
 
-    const user = await getAuthenticatedUser(token);
+    const supabaseUser = await getAuthenticatedUser(token);
 
-    // Obtener usuario con su pareja
-    const { data: userWithCouple, error: userError } = await supabase
+    // 1. Primero obtener el usuario y su couple_id
+    const { data: user, error: userError } = await supabase
       .from('users')
-      .select(`
-        *,
-        couple:couples (
-          *,
-          users:users (
-            id,
-            email,
-            display_name
-          )
-        )
-      `)
-      .eq('id', user.id)
+      .select('id, email, display_name, couple_id')
+      .eq('id', supabaseUser.id)
       .single();
 
-    if (userError || !userWithCouple?.couple) {
-      return res.status(404).json(errorResponse('No tienes una pareja asignada', 404));
+    if (userError || !user) {
+      console.error('Error obteniendo usuario:', userError);
+      return res.status(404).json(errorResponse('Usuario no encontrado', 404));
     }
 
-    const couple = userWithCouple.couple;
-    const partner = couple.users?.find((u: any) => u.id !== user.id);
-    const myInfo = couple.users?.find((u: any) => u.id === user.id);
+    // 2. Verificar si tiene pareja
+    if (!user.couple_id) {
+      return res.status(200).json(successResponse(null, 'Sin pareja asignada'));
+    }
+
+    // 3. Obtener la información de la pareja
+    const { data: couple, error: coupleError } = await supabase
+      .from('couples')
+      .select('id, code, created_at')
+      .eq('id', user.couple_id)
+      .single();
+
+    if (coupleError || !couple) {
+      console.error('Error obteniendo pareja:', coupleError);
+      return res.status(404).json(errorResponse('Pareja no encontrada', 404));
+    }
+
+    // 4. Obtener todos los miembros de la pareja
+    const { data: members, error: membersError } = await supabase
+      .from('users')
+      .select('id, email, display_name')
+      .eq('couple_id', user.couple_id);
+
+    if (membersError) {
+      console.error('Error obteniendo miembros:', membersError);
+    }
+
+    const membersList = members || [];
+    const partner = membersList.find((m: any) => m.id !== supabaseUser.id);
+    const myInfo = membersList.find((m: any) => m.id === supabaseUser.id);
 
     res.status(200).json(successResponse({
       coupleId: couple.id,
@@ -353,8 +371,8 @@ export const getCoupleInfo = async (req: Request, res: Response) => {
         email: partner.email,
         displayName: partner.display_name,
       } : null,
-      memberCount: couple.users?.length || 0,
-      since: userWithCouple.created_at,
+      memberCount: membersList.length,
+      since: couple.created_at,
     }, 'Información de pareja'));
 
   } catch (error: any) {
