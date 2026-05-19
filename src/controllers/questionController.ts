@@ -8,7 +8,49 @@ const getAuthenticatedUser = async (token: string) => {
   return user;
 };
 
-// Obtener pregunta del día (con estado de la pareja)
+/**
+ * @swagger
+ * /questions/today:
+ *   get:
+ *     summary: Obtener pregunta del día
+ *     description: Retorna la pregunta del día con el estado de respuestas de la pareja
+ *     tags: [Preguntas]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Pregunta obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     hasAnswered:
+ *                       type: boolean
+ *                     completed:
+ *                       type: boolean
+ *                     questionId:
+ *                       type: integer
+ *                     question:
+ *                       type: string
+ *                     category:
+ *                       type: string
+ *                     date:
+ *                       type: string
+ *                     waitingForPartner:
+ *                       type: boolean
+ *                     respondersCount:
+ *                       type: integer
+ *       401:
+ *         description: No autorizado
+ *       404:
+ *         description: No tiene pareja asignada
+ */
 export const getTodaysQuestion = async (req: Request, res: Response) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
@@ -126,7 +168,63 @@ export const getTodaysQuestion = async (req: Request, res: Response) => {
   }
 };
 
-// Responder pregunta del día
+/**
+ * @swagger
+ * /questions/answer:
+ *   post:
+ *     summary: Responder pregunta del día
+ *     description: Guarda la respuesta del usuario a la pregunta del día
+ *     tags: [Preguntas]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - questionId
+ *               - answer
+ *             properties:
+ *               questionId:
+ *                 type: integer
+ *                 example: 1
+ *               answer:
+ *                 type: string
+ *                 example: "Me encantó su sentido del humor"
+ *     responses:
+ *       201:
+ *         description: Respuesta guardada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     message:
+ *                       type: string
+ *                     question:
+ *                       type: string
+ *                     answer:
+ *                       type: string
+ *                     date:
+ *                       type: string
+ *                     isComplete:
+ *                       type: boolean
+ *                     waitingForPartner:
+ *                       type: boolean
+ *       400:
+ *         description: Ya respondió hoy o datos inválidos
+ *       401:
+ *         description: No autorizado
+ *       404:
+ *         description: No tiene pareja asignada
+ */
 export const answerQuestion = async (req: Request, res: Response) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
@@ -220,7 +318,59 @@ export const answerQuestion = async (req: Request, res: Response) => {
   }
 };
 
-// Obtener historial de respuestas de la pareja
+/**
+ * @swagger
+ * /questions/history:
+ *   get:
+ *     summary: Obtener historial de respuestas
+ *     description: Retorna el historial de respuestas de la pareja
+ *     tags: [Preguntas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         description: Número máximo de respuestas a retornar (default 30)
+ *     responses:
+ *       200:
+ *         description: Historial obtenido exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     answers:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           date:
+ *                             type: string
+ *                           question:
+ *                             type: string
+ *                           category:
+ *                             type: string
+ *                           answers:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                               properties:
+ *                                 userId:
+ *                                   type: string
+ *                                 answer:
+ *                                   type: string
+ *                     count:
+ *                       type: integer
+ *       401:
+ *         description: No autorizado
+ */
 export const getAnswerHistory = async (req: Request, res: Response) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');

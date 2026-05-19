@@ -383,7 +383,37 @@ export const getCoupleInfo = async (req: Request, res: Response) => {
 
 
 /**
- * Establecer o actualizar la fecha de aniversario
+ * @swagger
+ * /couple/anniversary:
+ *   post:
+ *     summary: Establecer fecha de aniversario
+ *     description: Guarda la fecha de aniversario de la pareja
+ *     tags: [Parejas]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - anniversaryDate
+ *             properties:
+ *               anniversaryDate:
+ *                 type: string
+ *                 format: date
+ *                 example: "2024-01-15"
+ *               celebrateMonths:
+ *                 type: boolean
+ *                 example: true
+ *     responses:
+ *       200:
+ *         description: Aniversario guardado exitosamente
+ *       401:
+ *         description: No autorizado
+ *       404:
+ *         description: No tiene pareja asignada
  */
 export const setAnniversary = async (req: Request, res: Response) => {
   try {
@@ -440,7 +470,37 @@ export const setAnniversary = async (req: Request, res: Response) => {
 };
 
 /**
- * Obtener información del aniversario (días restantes, meses, etc.)
+ * @swagger
+ * /couple/anniversary:
+ *   get:
+ *     summary: Obtener información de aniversario
+ *     description: Retorna días juntos, próximos aniversarios, etc.
+ *     tags: [Parejas]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Información obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     anniversaryDate:
+ *                       type: string
+ *                     daysSince:
+ *                       type: integer
+ *                     daysUntil:
+ *                       type: integer
+ *                     monthsTogether:
+ *                       type: integer
+ *       401:
+ *         description: No autorizado
  */
 export const getAnniversaryInfo = async (req: Request, res: Response) => {
   try {
