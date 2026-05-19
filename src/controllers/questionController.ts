@@ -130,7 +130,7 @@ export const getTodaysQuestion = async (req: Request, res: Response) => {
     } else {
       // Obtener pregunta del día basada en el día del año
       const { data: questions, error: qError } = await supabase
-        .from('daily_questions')
+        .from('public.daily_questions')
         .select('*')
         .order('id', {ascending: true});
 
