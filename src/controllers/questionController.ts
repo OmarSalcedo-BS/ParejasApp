@@ -88,7 +88,7 @@ export const getTodaysQuestion = async (req: Request, res: Response) => {
       .select('id, answer')
       .eq('user_id', user.id)
       .eq('answer_date', today)
-      .single();
+      .maybeSingle();  // 👈 usar maybeSingle para evitar error si no existe
 
     // Verificar el estado general de la pregunta del día
     const { data: coupleQuestion } = await supabase
@@ -96,12 +96,12 @@ export const getTodaysQuestion = async (req: Request, res: Response) => {
       .select('status, question_id')
       .eq('couple_id', coupleId)
       .eq('question_date', today)
-      .single();
+      .maybeSingle();  // 👈 usar maybeSingle
 
     // Si ya completaron la pregunta hoy
     if (coupleQuestion?.status === 'completed') {
       return res.status(200).json(successResponse({
-        hasAnswered: true,
+        hasAnswered: myAnswer !== null,
         completed: true,
         message: 'Ya completaron la pregunta de hoy'
       }, 'Pregunta completada'));
@@ -114,25 +114,37 @@ export const getTodaysQuestion = async (req: Request, res: Response) => {
 
     if (coupleQuestion?.question_id) {
       // Usar la pregunta que está en curso
-      const { data: question } = await supabase
+      const { data: question, error: qError } = await supabase
         .from('daily_questions')
         .select('id, question, category')
         .eq('id', coupleQuestion.question_id)
-        .single();
+        .maybeSingle();  // 👈 usar maybeSingle
       
-      questionId = question!.id;
-      questionText = question!.question;
-      category = question!.category;
+      if (qError || !question) {
+        return res.status(500).json(errorResponse('Error obteniendo pregunta', 500));
+      }
+      
+      questionId = question.id;
+      questionText = question.question;
+      category = question.category;
     } else {
       // Obtener pregunta del día basada en el día del año
-      const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
-      const { data: questions } = await supabase
+      const { data: questions, error: qError } = await supabase
         .from('daily_questions')
         .select('*')
         .order('id');
+
+      if (qError || !questions || questions.length === 0) {
+        return res.status(500).json(errorResponse('No hay preguntas disponibles', 500));
+      }
       
-      const questionIndex = dayOfYear % (questions?.length || 20);
-      const question = questions![questionIndex];
+      const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+      const questionIndex = dayOfYear % questions.length;
+      const question = questions[questionIndex];
+      
+      if (!question) {
+        return res.status(500).json(errorResponse('Error seleccionando pregunta', 500));
+      }
       
       questionId = question.id;
       questionText = question.question;
