@@ -1,15 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || '';
 
-if (!supabaseUrl || !supabaseAnonKey) {
+if (!supabaseUrl || !supabaseServiceKey) {
   console.error('❌ Faltan variables de Supabase en .env');
   console.error('SUPABASE_URL:', supabaseUrl ? '✅' : '❌');
-  console.error('SUPABASE_ANON_KEY:', supabaseAnonKey ? '✅' : '❌');
+  console.error('SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY ? '✅' : '❌');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // Tipos para nuestras tablas (documentación)
 export type User = {
